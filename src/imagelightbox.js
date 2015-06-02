@@ -169,7 +169,7 @@
                 }
 
                 inProgress = true;
-                if( options.onLoadStart !== false ) { options.onLoadStart(); }
+                if( options.onLoadStart !== false ) { options.onLoadStart(target); }
 
                 setTimeout( function()
                 {
@@ -202,7 +202,7 @@
                             image.animate( params, options.animationSpeed, function()
                             {
                                 inProgress = false;
-                                if( options.onLoadEnd !== false ) { options.onLoadEnd(); }
+                                if( options.onLoadEnd !== false ) { options.onLoadEnd(target); }
                             });
                             if( options.preloadNext )
                             {
@@ -213,7 +213,7 @@
                         })
                         .error( function()
                         {
-                            if( options.onLoadEnd !== false ) { options.onLoadEnd(); }
+                            if( options.onLoadEnd !== false ) { options.onLoadEnd(target) }
                         });
 
                     var swipeStart	 = 0,

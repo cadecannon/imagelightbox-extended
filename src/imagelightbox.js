@@ -51,6 +51,7 @@
         var options = $.extend(
             {
                 selector:		'id="imagelightbox"',
+                event:          'click',
                 allowedTypes:	'png|jpg|jpeg||gif', // add support for generated images without an extension
                 animationSpeed:	250,
                 preloadNext:	true,
@@ -87,7 +88,7 @@
                 nextTarget : function () {
                     return this.nextTargetDefault();
                 },
-                
+
                 nextTargetDefault : function () {
                     var targetIndex = targets.index(target) + 1;
                     if (targetIndex >= targets.length)
@@ -312,7 +313,7 @@
 
         if( options.quitOnDocClick )
         {
-            // fix the bug , using the opera (moblie) and wechat. 
+            // fix the bug , using the opera (moblie) and wechat.
             $( document ).on('click', function( e )
             // $( document ).on( hasTouch ? 'touchend' : 'click', function( e )
             {
@@ -348,8 +349,8 @@
             loadImage();
         };
 
-        $( document ).off( 'click', this.selector);
-        $( document ).on( 'click', this.selector, this.startImageLightbox);
+        $( document ).off( options.event, this.selector);
+        $( document ).on( options.event, this.selector, this.startImageLightbox);
 
         this.each( function()
         {

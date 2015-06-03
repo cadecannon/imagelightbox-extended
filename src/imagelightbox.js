@@ -390,7 +390,7 @@
                 if( !isTargetValid( this )) { return true; }
                 targets = targets.add( $( this ) );
             });
-            elements.click(this.startImageLightbox);
+            elements.on(options.event, this.startImageLightbox);
             return this;
         };
         return this;

@@ -1,87 +1,75 @@
 define(['jquery'], function($){
 
-	var ImageLightbox = function($element, options){
-		if($element.data('imageLightbox') != null){
-			$element.data('imageLightbox').destroy();
-		}
+	var ImageLightbox = function(selector, options){
+		this.$selector = $(selector);
+		//this.destory();
 
 		this.isOpen = false;
 		this.inProgress = false;
 		this.currentImage = null;
-		this.hasTransitionSupport = this._cssTransitionsSupported();
+		this.currentTarget = null;
+		this.hasTransitionSupport = (this._cssTransitionSupport() !== false);
 		this.hasTouch = ('ontouchstart' in window),
 		this.hasPointers = window.navigator.pointerEnabled || window.navigator.msPointerEnabled,
 		this.listeners = {};
-		this.els = [];
+		this.$targets = $([]);
+
+
+		this.imageWidth = 0;
+		this.imageHeight = 0;
+		this.swipeDiff = 0;
+
+		/*
+			$targets		= $([]),
+			target		= $(),
+			image		= $(),
+			inProgress	= false,
+			isTargetValid = function(element){
+				var classic = $(element).prop('tagName').toLowerCase() === 'a' && (new RegExp('('+options.allowedTypes+')$', 'i')).test($(element).attr('href'));
+				var html5 = $(element).attr('data-lightbox') !== undefined;
+				return classic || html5;
+			},
+		*/
 
 		this.options = $.extend(this.defaults, options);
 
-		/*$(window).on('resize', this.setImage);
-
-		if(this.options.quitOnDocClick){
-			// fix the bug , using the opera (moblie) and wechat. 
-			//$(document).on('click', function(e)
-			// $(document).on(hasTouch ? 'touchend' : 'click', function(e){
-				//e.preventDefault();
-				//if(image.length && !$(e.target).is(image)){ close(); }
-			//});
-		}
-
-		if(options.enableKeyboard){
-			$(document).on('keyup', function(e){
-				if(!image.length){ return true; }
-				e.preventDefault();
-				if(e.keyCode === 27 && options.quitOnEscKey === true){ close(); }
-				if(e.keyCode === 37){
-					previous();
-				} else if(e.keyCode === 39){
-					next();
-				}
-			});
-		}*/
-		$(this.selector).off('click').on('click', this.onClick.bind(this));
-
-		$.each(this.selector, function(i,el){
-			els.push($(el));
-		});
-
-		$element.data('imageLightbox', this);
+		this._init();
 	};
 
-	ImageLightbox.prototype.extend({
+	$.extend(ImageLightbox.prototype,{
 		defaults: {
-			selector:		'id="imagelightbox"',
-			allowedTypes:	'png|jpg|jpeg||gif', // add support for generated images without an extension
+			lightboxID: 'imagelightbox',
+			allowedTypes: 'png|jpg|jpeg||gif', // add support for generated images without an extension
 			animationSpeed:	250,
-			prenext:	true,
+			preload: true,
 			enableKeyboard:	true,
-			quitOnEnd:		false,
-			quitOnImgClick: false,
-			quitOnDocClick: true,
-			quitOnEscKey:   true, // quit when Esc key is pressed
-			previousTarget: function(){
+			closeOnEnd: false,
+			closeOnImgClick: false,
+			closeOnDockClick: true,
+			closeOnEscKey: true, // quit when Esc key is pressed
+			/*previousTarget: function(){
 				return this.previousTargetDefault();
 			},
 			previousTargetDefault: function(){
-				var targetIndex = targets.index(target) - 1;
+				var targetIndex = $targets.index(target) - 1;
 				if(targetIndex < 0){
-					if(options.quitOnEnd === true){
+					if(options.closeOnEnd === true){
 						close();
 						return false;
 					}
 					else{
-						targetIndex = targets.length - 1;
+						targetIndex = $targets.length - 1;
 					}
 				}
-				target = targets.eq(targetIndex);
+				target = $targets.eq(targetIndex);
 			},
 			nextTarget: function(){
 				return this.nextTargetDefault();
 			},
 			nextTargetDefault: function(){
-				var targetIndex = targets.index(target)+1;
-				if(targetIndex >= targets.length){
-					if(options.quitOnEnd === true){
+				var targetIndex = $targets.index(target)+1;
+				if(targetIndex >= $targets.length){
+					if(options.closeOnEnd === true){
 						close();
 						return false;
 					}
@@ -89,10 +77,107 @@ define(['jquery'], function($){
 						targetIndex = 0;
 					}
 				}
-				target = targets.eq(targetIndex);
+				target = $targets.eq(targetIndex);
+			}*/
+		},
+		open: function(){
+			if(this.isOpen){
+				return;
+			}
+			this.isOpen = true;
+			this._trigger('open');
+			this._loadImage();
+			this._bindListeners();
+		},
+		close: function(){
+			if(this.currentImage === null){
+				return false;
+			}
+			var self = this;
+
+			this.currentImage.animate({ opacity: 0 }, this.options.animationSpeed, function(){
+				self._removeImage();
+				self._unbindListeners();
+				self.inProgress = false;
+				self._trigger('close');
+			});
+		},
+		previous: function(){
+			var targetIndex = this.$targets.index(this.currentTarget)-1;
+			if(targetIndex < 0){
+				if(this.options.closeOnEnd === true){
+					this.close();
+					return;
+				}
+				else{
+					targetIndex = this.$targets.length-1;
+
+				}
+			}
+			this.currentTarget = this.$targets.eq(targetIndex);
+
+			this._loadImage('left');
+			this._trigger('previous', this.currentTarget);
+		},
+		next: function(){
+			var targetIndex = this.$targets.index(this.currentTarget)+1;
+			if(targetIndex >= this.$targets.length){
+				if(this.options.closeOnEnd === true){
+					this.close();
+					return;
+				}
+				else{
+					targetIndex = 0;
+				}
+			}
+			this.currentTarget = this.$targets.eq(targetIndex);
+			this._loadImage('right');
+			this._trigger('next', this.currentTarget);
+		},
+		add: function(selector){
+			/*selector.each(function(){
+				if(!isTargetValid(this)){ return true; }
+				$targets = $targets.add($(this));
+			});
+			selector.click(this.startImageLightbox);
+			return this;*/
+			console.log("ADDING ELEMENTS", selector);
+		},
+		remove: function(selector){
+			console.log("REMOVING ELEMENTS", selector);
+		},
+		destroy: function(){
+			console.log("DESTROY ME!");
+     		this.$selector.data('select2').destroy();
+			this._unbindListeners();
+			this.$selector.off('click', this._onClick.bind(this));
+		},
+		at: function(index){
+			var tmpTarget = this.$targets.eq(index);
+			if(tmpTarget.length){
+				var currentIndex = this.$targets.index(this.currentTarget);
+				this.currentTarget = tmpTarget;
+				this._loadImage(index < currentIndex ? 'left' : 'right');
 			}
 		},
-		setImage: function(){
+		_init: function(){
+			var self = this;
+			console.log(this.$selector);
+			this.$selector.each(function(i,sel){
+				console.log(sel, i);
+				if(self._isValidTarget(sel)){
+					self.$targets = self.$targets.add($(sel));
+				}
+				else{
+					console.log("Not valid target", sel);
+				}
+			});
+			console.log("targets:", this.$targets);
+
+			this.$selector.on('click', this._onClick.bind(this)).data('imageLightbox', this);
+			this._trigger('init');
+		},
+		_setImage: function(){
 			if(this.currentImage === null) return;
 
 			var self = this,
@@ -102,24 +187,24 @@ define(['jquery'], function($){
 
 			tmpImage.src = this.currentImage.attr('src');
 			tmpImage.onload = function(){
-				imageWidth = tmpImage.width;
-				imageHeight = tmpImage.height;
+				self.imageWidth = tmpImage.width;
+				self.imageHeight = tmpImage.height;
 
-				if(imageWidth > screenWidth || imageHeight > screenHeight){
-					var ratio = imageWidth / imageHeight > screenWidth / screenHeight ? imageWidth / screenWidth : imageHeight / screenHeight;
-					imageWidth /= ratio;
-					imageHeight /= ratio;
+				if(self.imageWidth > screenWidth || self.imageHeight > screenHeight){
+					var ratio = self.imageWidth / self.imageHeight > screenWidth / screenHeight ? self.imageWidth / screenWidth : self.imageHeight / screenHeight;
+					self.imageWidth /= ratio;
+					self.imageHeight /= ratio;
 				}
 
 				self.currentImage.css({
-					width: imageWidth+'px',
-					height: imageHeight+'px',
-					top: ($(window).height() - imageHeight)/2+'px',
-					left: ($(window).width() - imageWidth)/2+'px'
+					width: self.imageWidth+'px',
+					height: self.imageHeight+'px',
+					top: ($(window).height() - self.imageHeight)/2+'px',
+					left: ($(window).width() - self.imageWidth)/2+'px'
 				});
 			};
 		},
-		loadImage: function(direction){
+		_loadImage: function(direction){
 			if(this.inProgress){
 				return false;
 			}
@@ -129,36 +214,38 @@ define(['jquery'], function($){
 
 			if(this.currentImage !== null){
 				var params = { opacity: 0 };
-				if(this.hasTransitionSupport){ 
-					this.translateX(this.currentImage, (100 * direction) - swipeDiff+'px', this.options.animationSpeed / 1000);
+				if(this.hasTransitionSupport){
+					this._translateX(this.currentImage, (100 * direction) - this.swipeDiff+'px', this.options.animationSpeed / 1000);
 				}
 				else{
 					params.left = parseInt(this.currentImage.css('left'))+100 * direction+'px';
 				}
-				this.currentImage.animate(params, this.options.animationSpeed, function(){ self.removeImage(); });
-				swipeDiff = 0;
+				this.currentImage.animate(params, this.options.animationSpeed, function(){ self._removeImage(); });
+				this.swipeDiff = 0;
 			}
 
 			this.inProgress = true;
-			this.trigger('load:start');
+			this._trigger('load:start', this.currentTarget);
+
+			console.log('load:start', this.currentTarget);
 
 			setTimeout(function(){
-				var imgPath = target.attr('href');
+				var imgPath = self.currentTarget.attr('href');
 				if(imgPath === undefined){
-					imgPath = target.attr('data-lightbox');
+					imgPath = self.currentTarget.attr('data-lightbox');
 				}
-				self.currentImage = $('<img '+options.selector+' />').attr('src', imgPath).load(function(){
+				self.currentImage = $('<img id="'+self.options.lightboxID+'" />').attr('src', imgPath).load(function(){
 					self.currentImage.appendTo('body');
-					self.setImage();
+					self._setImage();
 
 					var params = { opacity: 1 };
 
 					self.currentImage.css('opacity', 0);
-					if(hasTransitionSupport)
+					if(self.hasTransitionSupport)
 					{
-						self.translateX(self.currentImage, -100 * direction+'px', 0);
-						setTimeout(function(){ 
-							self.translateX(self.currentImage, 0+'px', self.options.animationSpeed / 1000);
+						self._translateX(self.currentImage, -100 * direction+'px', 0);
+						setTimeout(function(){
+							self._translateX(self.currentImage, 0+'px', self.options.animationSpeed / 1000);
 						}, 50);
 					}
 					else
@@ -168,21 +255,20 @@ define(['jquery'], function($){
 						self.currentImage.css('left', imagePosLeft - 100 * direction+'px');
 					}
 
-					self.currentImage.animate(params, options.animationSpeed, function(){
+					self.currentImage.animate(params, self.options.animationSpeed, function(){
 						self.inProgress = false;
-						self.trigger('load:complete', this.currentTarget)
+						self._trigger('load:complete', this.currentTarget)
 					});
 
-					if(self.options.prenext)
-					{
-						var nextTarget = targets.eq(targets.index(target)+1);
-						if(!nextTarget.length){ 
-							nextTarget = targets.eq(0);
+					if(self.options.preloadNext){
+						var nextTarget = self.$targets.eq(self.$targets.index(self.currentTarget)+1);
+						if(!nextTarget.length){
+							nextTarget = self.$targets.eq(0);
 						}
 						$('<img />').attr('src', nextTarget.attr('href')).load();
 					}
 				}).error(function(){
-					self.trigger('load:error', this.currentTarget);
+					self._trigger('load:error', this.currentTarget);
 				});
 
 				var swipeStart = 0,
@@ -191,47 +277,47 @@ define(['jquery'], function($){
 
 				self.currentImage.on(self.hasPointers ? 'pointerup MSPointerUp' : 'click', function(e){
 					e.preventDefault();
-					if(self.options.quitOnImgClick){
+					if(self.options.closeOnImgClick){
 						self.close();
 						return false;
 					}
-					if(self.wasTouched(e.originalEvent)){ 
+					if(self._wasTouched(e.originalEvent)){
 						return true;
 					}
 					var posX = (e.pageX || e.originalEvent.pageX) - e.target.offsetLeft;
-					if(imageWidth / 2 > posX){
+					if(self.imageWidth / 2 > posX){
 						self.previous();
 					}
 					else{
 						self.next();
 					}
 				}).on('touchstart pointerdown MSPointerDown', function(e){
-					if(!self.wasTouched(e.originalEvent) || self.options.quitOnImgClick){ 
+					if(!self._wasTouched(e.originalEvent) || self.options.closeOnImgClick){
 						return true;
 					}
-					if(isCssTransitionSupport){
+					if(self.hasTransitionSupport){
 						imagePosLeft = parseInt(self.currentImage.css('left'));
 					}
 					swipeStart = e.originalEvent.pageX || e.originalEvent.touches[0].pageX;
 				}).on('touchmove pointermove MSPointerMove', function(e){
-					if(!self.wasTouched(e.originalEvent) || self.options.quitOnImgClick){
+					if(!self._wasTouched(e.originalEvent) || self.options.closeOnImgClick){
 						return true;
 					}
 					e.preventDefault();
 					swipeEnd = e.originalEvent.pageX || e.originalEvent.touches[ 0 ].pageX;
-					swipeDiff = swipeStart - swipeEnd;
-					if(isCssTransitionSupport){
-						self.translateX(self.currentImage, -swipeDiff+'px', 0);
+					self.swipeDiff = swipeStart - swipeEnd;
+					if(self.hasTransitionSupport){
+						self._translateX(self.currentImage, -self.swipeDiff+'px', 0);
 					}
 					else{
-						self.currentImage.css('left', imagePosLeft - swipeDiff+'px');
+						self.currentImage.css('left', imagePosLeft - self.swipeDiff+'px');
 					}
 				}).on('touchend touchcancel pointerup pointercancel MSPointerUp MSPointerCancel', function(e){
-					if(!self.wasTouched(e.originalEvent) || self.options.quitOnImgClick){
+					if(!self._wasTouched(e.originalEvent) || self.options.closeOnImgClick){
 						return true;
 					}
-					if(Math.abs(swipeDiff) > 50){
-						if(swipeDiff < 0){
+					if(Math.abs(self.swipeDiff) > 50){
+						if(self.swipeDiff < 0){
 							self.previous();
 						}
 						else{
@@ -239,57 +325,35 @@ define(['jquery'], function($){
 						}
 					}
 					else{
-						if(isCssTransitionSupport){
-							cssTransitionTranslateX(image, 0+'px', self.options.animationSpeed / 1000);
+						if(self.hasTransitionSupport){
+							self._translateX(self.currentImage, 0+'px', self.options.animationSpeed / 1000);
 						}
 						else{
-							self.currentImage.animate({ 'left': imagePosLeft+'px' }, self.options.animationSpeed / 2);
+							self.currentImage.animate({ left: imagePosLeft+'px' }, self.options.animationSpeed / 2);
 						}
 					}
 				});
-			}, self.options.animationSpeed+100);
+			}, this.options.animationSpeed+100);
 		},
-		previous: function(){
-			this.loadImage('left');
+		_isValidTarget: function(element){
+			var classic = $(element).prop('tagName').toLowerCase() === 'a' && (new RegExp('('+this.options.allowedTypes+')$', 'i')).test($(element).attr('href'));
+			var html5 = $(element).attr('data-lightbox') !== undefined;
+			return classic || html5;
 		},
-		next: function(){
-			this.loadImage('right');
+		_translateX: function(element, positionX, speed){
+			var options = {}, prefix = this._cssTransitionSupport();
+			options[prefix+'transform'] = 'translateX('+positionX+')';
+			options[prefix+'transition'] = prefix+'transform '+speed+'s linear';
+			element.css(options);
 		},
-		removeImage: function(){
+		_removeImage: function(){
 			if(this.currentImage === null){
 				return false;
 			}
 			this.currentImage.remove();
 			this.currentImage = null;
 		},
-		onClick: function(e){
-			e.preventDefault();
-			if(this.inProgress){
-				return;
-			}
-			this.currentImage = $(e.currentTarget);
-			this.open();
-		},
-		open: function(){
-			if(this.isOpen){
-				return;
-			}
-			this.trigger('open');
-			this.loadImage();
-		},
-		close: function(){
-			if(this.currentImage === null){
-				return false;
-			}
-			var self = this;
-
-			this.currentImage.animate({ opacity: 0 }, this.options.animationSpeed, function(){
-				self.removeImage();
-				self.inProgress = false;
-				self.trigger('close');
-			});
-		},
-		on: function(event, callback){
+		_on: function(event, callback){
 			this.listeners = this.listeners || {};
 
 			if(event in this.listeners){
@@ -299,102 +363,108 @@ define(['jquery'], function($){
 				this.listeners[event] = [callback];
 			}
 		},
-		trigger: function(event){
+		_trigger: function(event){
 			var slice = Array.prototype.slice;
 
 			this.listeners = this.listeners || {};
 
 			if(event in this.listeners){
-				this.invoke(this.listeners[event], slice.call(arguments, 1));
+				this._invoke(this.listeners[event], slice.call(arguments, 1));
 			}
 			if('*' in this.listeners){
-				this.invoke(this.listeners['*'], arguments);
+				this._invoke(this.listeners['*'], arguments);
 			}
 		},
-		invoke: function(listeners, params){
+		_invoke: function(listeners, params){
 			for(var i = 0, len = listeners.length; i < len; i++){
 				listeners[i].apply(this, params);
 			}
 		},
-		at: function(index){
-			var tmpTarget = this.els[index];
-			if(tmpTarget.length){
-				var currentIndex = targets.index(target);
-				target = tmpTarget;
-				loadImage(index < currentIndex ? 'left' : 'right');
+		_wasTouched: function(event){
+			if(this.hasTouch){
+				return true;
 			}
-			return this;
-		};
-		translateX = function(element, positionX, speed){
-			var options = {}, prefix = cssTransitionSupport();
-			options[prefix+'transform'] = 'translateX('+positionX+')';
-			options[prefix+'transition'] = prefix+'transform '+speed+'s linear';
-			element.css(options);
-		},
-		/*wasTouched	= function(event){
-			if(hasTouch){ return true; }
 
-			if(!hasPointers || typeof event === 'undefined' || typeof event.pointerType === 'undefined'){ return false; }
+			if(!this.hasPointers || typeof event === 'undefined' || typeof event.pointerType === 'undefined'){
+				return false;
+			}
 
 			if(typeof event.MSPOINTER_TYPE_MOUSE !== 'undefined'){
-				if(event.MSPOINTER_TYPE_MOUSE !== event.pointerType){ return true; }
+				if(event.MSPOINTER_TYPE_MOUSE !== event.pointerType){
+					return true;
+				}
 			}
 			else if(event.pointerType !== 'mouse'){
 				return true;
 			}
 			return false;
-		};*/
-		_bindListeners: function(){
-
 		},
-		_unbindListeners: function(){
+		_bindListeners: function(){
 			var self = this;
 
-			$(window).on('resize', this.setImage);
+			$(window).on('resize', this._setImage.bind(this));
 
-			if(this.options.quitOnDocClick){
-				// fix the bug , using the opera (moblie) and wechat. 
-				//$(document).on('click', function(e)
-				// $(document).on(hasTouch ? 'touchend' : 'click', function(e){
-					//e.preventDefault();
-					//if(image.length && !$(e.target).is(image)){ close(); }
-				//});
+			if(this.options.closeOnDockClick){
+				// $(document).on(this.hasTouch ? 'touchend' : 'click', this._closeOnClick.bind(this));
+				$(document).on('click', this._closeOnClick.bind(this));
 			}
 			if(this.options.enableKeyboard){
-				$(document).on('keyup', function(e){
-					e.preventDefault();
-					if(e.keyCode === 27 && self.options.quitOnEscKey === true){ 
-						self.close();
-					}
-					else if(e.keyCode === 37){
-						self.previous();
-					}
-					else if(e.keyCode === 39){
-						self.next();
-					}
-				});
+				$(document).on('keyup', this._onKeyUp.bind(this));
 			}
 		},
-		_cssTransitionsSupported = function(){
+		_unbindListeners: function(){
+			$(window).off('resize', this._setImage);
+			$(document).off('click', this._closeOnClick);
+			$(document).off('keyup', this._onKeyUp);
+		},
+		_onClick: function(e){
+			e.preventDefault();
+			if(this.inProgress){
+				return;
+			}
+			this.currentTarget = $(e.currentTarget);
+			this.open();
+		},
+		_closeOnClick: function(e){
+			if(this.isOpen && !$(e.target).is(this.currentImage)){
+				this.close();
+			}
+		},
+		_onKeyUp: function(e){
+			e.preventDefault();
+			if(e.keyCode === 27 && this.options.closeOnEscKey === true){
+				this.close();
+			}
+			else if(e.keyCode === 37){
+				this.previous();
+			}
+			else if(e.keyCode === 39){
+				this.next();
+			}
+		},
+		_cssTransitionSupport: function(){
 			var s = document.body || document.documentElement;
 			s = s.style;
-			if(s.WebkitTransition === ''){ return true; }
-			if(s.MozTransition === ''){ return true; }
-			if(s.OTransition === ''){ return true; }
-			if(s.transition === ''){ return true; }
+            if(s.WebkitTransition === ''){ return '-webkit-'; }
+            if(s.MozTransition === ''){ return '-moz-'; }
+            if(s.OTransition === ''){ return '-o-'; }
+            if(s.transition === ''){ return ''; }
 			return false;
-		},
+		}
 	});
-	 
+
+
+	return ImageLightbox;
+	/*
 	if($.fn.imageLightbox == null){
-		var thisMethods = ['destroy'];
+		var thisMethods = ['destroy', 'add', 'remove', 'open', 'close', 'at'];
 
 		$.fn.imageLightbox = function(options){
 			options = options || {};
 			if(typeof options === 'object'){
 				this.each(function(){
 					var instanceOptions = $.extend({}, options, true);
-
+					console.log($(this));
 					var instance = new ImageLightbox($(this), instanceOptions);
 				});
 
@@ -420,339 +490,5 @@ define(['jquery'], function($){
 				throw new Error('Invalid arguments for imageLightbox: '+options);
 			}
 		};
-	}
+	}*/
 });
-
-
-	/*var cssTransitionSupport = function(){
-			var s = document.body || document.documentElement;
-			s = s.style;
-			if(s.WebkitTransition === ''){ return '-webkit-'; }
-			if(s.MozTransition === ''){ return '-moz-'; }
-			if(s.OTransition === ''){ return '-o-'; }
-			if(s.transition === ''){ return ''; }
-			return false;
-		},
-		isCssTransitionSupport = cssTransitionSupport() !== false,
-		cssTransitionTranslateX = function(element, positionX, speed){
-			var options = {}, prefix = cssTransitionSupport();
-			options[prefix+'transform'] = 'translateX('+positionX+')';
-			options[prefix+'transition'] = prefix+'transform '+speed+'s linear';
-			element.css(options);
-		},
-		hasTouch = ('ontouchstart' in window),
-		hasPointers = window.navigator.pointerEnabled || window.navigator.msPointerEnabled,
-		wasTouched	= function(event){
-			if(hasTouch){ return true; }
-
-			if(!hasPointers || typeof event === 'undefined' || typeof event.pointerType === 'undefined'){ return false; }
-
-			if(typeof event.MSPOINTER_TYPE_MOUSE !== 'undefined'){
-				if(event.MSPOINTER_TYPE_MOUSE !== event.pointerType){ return true; }
-			}
-			else if(event.pointerType !== 'mouse'){
-				return true;
-			}
-			return false;
-		};
-
-	var ImageLightbox = function(opts){
-		var options = $.extend({
-				selector:		'id="imagelightbox"',
-				allowedTypes:	'png|jpg|jpeg||gif', // add support for generated images without an extension
-				animationSpeed:	250,
-				prenext:	true,
-				enableKeyboard:	true,
-				quitOnEnd:		false,
-				quitOnImgClick: false,
-				quitOnDocClick: true,
-				quitOnEscKey:   true, // quit when Esc key is pressed
-				onStart:		false,
-				onEnd:			false,
-				onLoadStart:	false,
-				onLoadEnd:		false,
-				previousTarget: function(){
-					return this.previousTargetDefault();
-				},
-				previousTargetDefault: function(){
-					var targetIndex = targets.index(target) - 1;
-					if(targetIndex < 0){
-						if(options.quitOnEnd === true){
-							close();
-							return false;
-						}
-						else{
-							targetIndex = targets.length - 1;
-						}
-					}
-					target = targets.eq(targetIndex);
-				},
-				nextTarget: function(){
-					return this.nextTargetDefault();
-				},
-				nextTargetDefault: function(){
-					var targetIndex = targets.index(target)+1;
-					if(targetIndex >= targets.length){
-						if(options.quitOnEnd === true){
-							close();
-							return false;
-						}
-						else{
-							targetIndex = 0;
-						}
-					}
-					target = targets.eq(targetIndex);
-				}
-			},
-			opts),
-			targets		= $([]),
-			target		= $(),
-			image		= $(),
-			imageWidth	= 0,
-			imageHeight = 0,
-			swipeDiff	= 0,
-			inProgress	= false,
-			isTargetValid = function(element){
-				var classic = $(element).prop('tagName').toLowerCase() === 'a' && (new RegExp('('+options.allowedTypes+')$', 'i')).test($(element).attr('href'));
-				var html5 = $(element).attr('data-lightbox') !== undefined;
-				return classic || html5;
-			},
-
-			setImage = function(){
-				if(!image.length){ return true; }
-
-				var screenWidth = $(window).width() * 0.8,
-					screenHeight = $(window).height() * 0.9,
-					tmpImage = new Image();
-
-				tmpImage.src = image.attr('src');
-				tmpImage.onload = function(){
-					imageWidth = tmpImage.width;
-					imageHeight = tmpImage.height;
-
-					if(imageWidth > screenWidth || imageHeight > screenHeight){
-						var ratio = imageWidth / imageHeight > screenWidth / screenHeight ? imageWidth / screenWidth : imageHeight / screenHeight;
-						imageWidth /= ratio;
-						imageHeight /= ratio;
-					}
-
-					image.css({
-						width: imageWidth+'px',
-						height: imageHeight+'px',
-						top: ($(window).height() - imageHeight)/2+'px',
-						left: ($(window).width() - imageWidth)/2+'px'
-					});
-				};
-			},
-
-			loadImage = function(direction){
-				if(inProgress){ return false; }
-
-				direction = typeof direction === 'undefined' ? false : direction === 'left' ? 1 : -1;
-
-				if(image.length){
-					var params = { 'opacity': 0 };
-					if(isCssTransitionSupport){ cssTransitionTranslateX(image, (100 * direction) - swipeDiff+'px', options.animationSpeed / 1000); }
-					else { params.left = parseInt(image.css('left'))+100 * direction+'px'; }
-					image.animate(params, options.animationSpeed, function(){ removeImage(); });
-					swipeDiff = 0;
-				}
-
-				inProgress = true;
-				if(options.onLoadStart !== false){ options.onLoadStart(target); }
-
-				setTimeout(function(){
-					var imgPath = target.attr('href');
-					if(imgPath === undefined){
-						imgPath = target.attr('data-lightbox');
-					}
-					image = $('<img '+options.selector+' />')
-						.attr('src', imgPath)
-						.load(function(){
-							image.appendTo('body');
-							setImage();
-
-							var params = { 'opacity': 1 };
-
-							image.css('opacity', 0);
-							if(isCssTransitionSupport)
-							{
-								cssTransitionTranslateX(image, -100 * direction+'px', 0);
-								setTimeout(function(){ cssTransitionTranslateX(image, 0+'px', options.animationSpeed / 1000); }, 50);
-							}
-							else
-							{
-								var imagePosLeft = parseInt(image.css('left'));
-								params.left = imagePosLeft+'px';
-								image.css('left', imagePosLeft - 100 * direction+'px');
-							}
-
-							image.animate(params, options.animationSpeed, function()
-							{
-								inProgress = false;
-								if(options.onLoadEnd !== false){ options.onLoadEnd(target); }
-							});
-							if(options.prenext)
-							{
-								var nextTarget = targets.eq(targets.index(target)+1);
-								if(!nextTarget.length){ nextTarget = targets.eq(0); }
-								$('<img />').attr('src', nextTarget.attr('href')).load();
-							}
-						})
-						.error(function(){
-							if(options.onLoadEnd !== false){ options.onLoadEnd(target) }
-						});
-
-					var swipeStart	 = 0,
-						swipeEnd	 = 0,
-						imagePosLeft = 0;
-
-					image.on(hasPointers ? 'pointerup MSPointerUp' : 'click', function(e){
-						e.preventDefault();
-						if(options.quitOnImgClick){
-							close();
-							return false;
-						}
-						if(wasTouched(e.originalEvent)){ return true; }
-						var posX = (e.pageX || e.originalEvent.pageX) - e.target.offsetLeft;
-						if(imageWidth / 2 > posX){
-							previous();
-						}
-						else
-						{
-							next();
-						}
-					}).on('touchstart pointerdown MSPointerDown', function(e){
-						if(!wasTouched(e.originalEvent) || options.quitOnImgClick){ return true; }
-						if(isCssTransitionSupport){ imagePosLeft = parseInt(image.css('left')); }
-						swipeStart = e.originalEvent.pageX || e.originalEvent.touches[ 0 ].pageX;
-					}).on('touchmove pointermove MSPointerMove', function(e){
-						if(!wasTouched(e.originalEvent) || options.quitOnImgClick){ return true; }
-						e.preventDefault();
-						swipeEnd = e.originalEvent.pageX || e.originalEvent.touches[ 0 ].pageX;
-						swipeDiff = swipeStart - swipeEnd;
-						if(isCssTransitionSupport){ cssTransitionTranslateX(image, -swipeDiff+'px', 0); }
-						else { image.css('left', imagePosLeft - swipeDiff+'px'); }
-					}).on('touchend touchcancel pointerup pointercancel MSPointerUp MSPointerCancel', function(e){
-						if(!wasTouched(e.originalEvent) || options.quitOnImgClick){ return true; }
-						if(Math.abs(swipeDiff) > 50){
-							if(swipeDiff < 0){
-								previous();
-							}
-							else{
-								next();
-							}
-						}
-						else{
-							if(isCssTransitionSupport){ cssTransitionTranslateX(image, 0+'px', options.animationSpeed / 1000); }
-							else { image.animate({ 'left': imagePosLeft+'px' }, options.animationSpeed / 2); }
-						}
-					});
-				}, options.animationSpeed+100);
-			},
-			previous = function(){
-				if(options.previousTarget() !== false){
-					loadImage('left');
-				}
-			},
-			next = function(){
-				if(options.nextTarget() !== false){
-					loadImage('right');
-				}
-			},
-			removeImage = function(){
-				if(!image.length){ return false; }
-				image.remove();
-				image = $();
-			},
-			close = function(){
-				if(!image.length){ return false; }
-				image.animate({ 'opacity': 0 }, options.animationSpeed, function(){
-					removeImage();
-					inProgress = false;
-					if(options.onEnd !== false){ options.onEnd(); }
-				});
-			};
-
-		$(window).on('resize', setImage);
-
-		if(options.quitOnDocClick){
-			// fix the bug , using the opera (moblie) and wechat. 
-			/*$(document).on('click', function(e)
-			// $(document).on(hasTouch ? 'touchend' : 'click', function(e){
-				e.preventDefault();
-				if(image.length && !$(e.target).is(image)){ close(); }
-			});
-		}
-
-		if(options.enableKeyboard){
-			$(document).on('keyup', function(e){
-				if(!image.length){ return true; }
-				e.preventDefault();
-				if(e.keyCode === 27 && options.quitOnEscKey === true){ close(); }
-				if(e.keyCode === 37){
-					previous();
-				} else if(e.keyCode === 39){
-					next();
-				}
-			});
-		}
-
-		this.startImageLightbox = function(e){
-			if(!isTargetValid(this)){ return true; }
-			if(e !== undefined){ e.preventDefault(); }
-			if(inProgress){ return false; }
-			inProgress = false;
-			if(options.onStart !== false){ options.onStart(); }
-			target = $(this);
-			loadImage();
-		};
-
-		$(document).off('click', this.selector);
-		$(document).on('click', this.selector, this.startImageLightbox);
-
-		$.each(function(){
-			if(!isTargetValid(this)){ return true; }
-			targets = targets.add($(this));
-		});
-
-		this.switchImageLightbox = function(index){
-			var tmpTarget = targets.eq(index);
-			if(tmpTarget.length){
-				var currentIndex = targets.index(target);
-				target = tmpTarget;
-				loadImage(index < currentIndex ? 'left' : 'right');
-			}
-			return this;
-		};
-
-		this.previous = function(){
-			previous();
-		};
-
-		this.next = function(){
-			next();
-		};
-
-		this.quitImageLightbox = function(){
-			close();
-			return this;
-		};
-		// You can add the other targets to the image queue.
-		this.addImageLightbox = function(elements){
-			elements.each(function(){
-				if(!isTargetValid(this)){ return true; }
-				targets = targets.add($(this));
-			});
-			elements.click(this.startImageLightbox);
-			return this;
-		};
-		this.removeImageLightbox = function(elements){
-			console.log("REMOVING ELEMENTS");
-		};
-		this.destroyLightbox = function(){
-			// Destroys this thing..
-			console.log("DESTROY ME!");
-		};
-		return this;
-	};*/
